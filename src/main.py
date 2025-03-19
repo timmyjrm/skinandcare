@@ -1,4 +1,5 @@
 import os
+import logging
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from telegram.ext import (
@@ -9,6 +10,16 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+import json
+from datetime import datetime
+import requests
+
+# Настройка логирования
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -69,6 +80,60 @@ QUESTIONS = {
 
 # Store user answers
 user_answers = {}
+
+# Загрузка токена из переменных окружения или .env файла
+def get_token():
+    # Сначала проверяем переменные окружения
+    token = os.getenv('BOT_TOKEN')
+    if token:
+        return token
+    
+    # Если токен не найден в переменных окружения, пробуем загрузить из .env
+    try:
+        load_dotenv()
+        token = os.getenv('BOT_TOKEN')
+        if not token:
+            raise ValueError("BOT_TOKEN not found in environment variables or .env file")
+        return token
+    except Exception as e:
+        logger.error(f"Error loading token: {e}")
+        raise
+
+# Загрузка ID администратора из переменных окружения или .env файла
+def get_admin_chat_id():
+    # Сначала проверяем переменные окружения
+    admin_chat_id = os.getenv('ADMIN_CHAT_ID')
+    if admin_chat_id:
+        return admin_chat_id
+    
+    # Если ID не найден в переменных окружения, пробуем загрузить из .env
+    try:
+        load_dotenv()
+        admin_chat_id = os.getenv('ADMIN_CHAT_ID')
+        if not admin_chat_id:
+            raise ValueError("ADMIN_CHAT_ID not found in environment variables or .env file")
+        return admin_chat_id
+    except Exception as e:
+        logger.error(f"Error loading admin chat ID: {e}")
+        raise
+
+# Загрузка ID получателей из переменных окружения или .env файла
+def get_recipient_ids():
+    # Сначала проверяем переменные окружения
+    recipient_ids = os.getenv('RECIPIENT_IDS')
+    if recipient_ids:
+        return recipient_ids.split(',')
+    
+    # Если ID не найдены в переменных окружения, пробуем загрузить из .env
+    try:
+        load_dotenv()
+        recipient_ids = os.getenv('RECIPIENT_IDS')
+        if not recipient_ids:
+            raise ValueError("RECIPIENT_IDS not found in environment variables or .env file")
+        return recipient_ids.split(',')
+    except Exception as e:
+        logger.error(f"Error loading recipient IDs: {e}")
+        raise
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send welcome message and ask for name."""
@@ -421,69 +486,65 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 def main():
-    """Main function to run the bot."""
-    # Get bot token from .env file
+    """Start the bot."""
     try:
-        with open('.env', 'r') as f:
-            line = f.readline().strip()
-            bot_token = line.split('=')[1].strip('"')  # Remove quotes if present
-        print(f"Bot token loaded successfully")
-    except Exception as e:
-        print(f"Error loading token: {e}")
-        return
-    
-    if not bot_token:
-        print("Error: BOT_TOKEN not found")
-        return
-    
-    # Create application
-    application = Application.builder().token(bot_token).build()
-    
-    # Add conversation handler
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
-        states={
-            WAITING_FOR_NAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)
-            ],
-            WAITING_FOR_AGE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_age)
-            ],
-            WAITING_FOR_CITY: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_city)
-            ],
-            WAITING_FOR_MEDIA: [
-                MessageHandler(filters.PHOTO | filters.VIDEO, handle_media)
-            ],
-            QUESTION_1: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_answer)
-            ],
-            QUESTION_2: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_answer)
-            ],
-            QUESTION_3: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_answer)
-            ],
-            QUESTION_4: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_answer)
-            ],
-            QUESTION_5: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_answer)
-            ],
-            CONTACT_SHARING: [
-                MessageHandler(filters.CONTACT, handle_contact)
-            ],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-    )
-    
-    application.add_handler(conv_handler)
-    
-    # Start the bot
-    print("CosmetBot is starting...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+        # Загружаем токен и ID
+        token = get_token()
+        admin_chat_id = get_admin_chat_id()
+        recipient_ids = get_recipient_ids()
+        
+        # Создаем приложение
+        application = Application.builder().token(token).build()
 
-if __name__ == "__main__":
+        # Добавляем обработчики
+        conv_handler = ConversationHandler(
+            entry_points=[CommandHandler('start', start)],
+            states={
+                WAITING_FOR_NAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)
+                ],
+                WAITING_FOR_AGE: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_age)
+                ],
+                WAITING_FOR_CITY: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_city)
+                ],
+                WAITING_FOR_MEDIA: [
+                    MessageHandler(filters.PHOTO | filters.VIDEO, handle_media)
+                ],
+                QUESTION_1: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_answer)
+                ],
+                QUESTION_2: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_answer)
+                ],
+                QUESTION_3: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_answer)
+                ],
+                QUESTION_4: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_answer)
+                ],
+                QUESTION_5: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_answer)
+                ],
+                CONTACT_SHARING: [
+                    MessageHandler(filters.CONTACT, handle_contact)
+                ],
+            },
+            fallbacks=[CommandHandler('cancel', cancel)]
+        )
+
+        application.add_handler(conv_handler)
+        application.add_handler(CommandHandler('cancel', cancel))
+
+        # Запускаем бота
+        print("CosmetBot is starting...")
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    except Exception as e:
+        logger.error(f"Error starting bot: {e}")
+        raise
+
+if __name__ == '__main__':
     main() 
 
 from telegram import Update
