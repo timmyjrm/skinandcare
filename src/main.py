@@ -13,6 +13,8 @@ from telegram.ext import (
 import json
 from datetime import datetime
 import requests
+from aiohttp import web
+import asyncio
 
 # Настройка логирования
 logging.basicConfig(
@@ -485,6 +487,20 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
+async def health_check(request):
+    """Handle health check requests."""
+    return web.Response(text="OK")
+
+async def start_web_server():
+    """Start the web server."""
+    app = web.Application()
+    app.router.add_get('/health', health_check)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', int(os.getenv('PORT', '8000')))
+    await site.start()
+    logger.info("Web server started")
+
 def main():
     """Start the bot."""
     try:
@@ -537,8 +553,14 @@ def main():
         application.add_handler(conv_handler)
         application.add_handler(CommandHandler('cancel', cancel))
 
-        # Запускаем бота
+        # Запускаем бота и веб-сервер
         print("CosmetBot is starting...")
+        
+        # Создаем и запускаем веб-сервер
+        loop = asyncio.get_event_loop()
+        loop.create_task(start_web_server())
+        
+        # Запускаем бота
         application.run_polling(allowed_updates=Update.ALL_TYPES)
     except Exception as e:
         logger.error(f"Error starting bot: {e}")
